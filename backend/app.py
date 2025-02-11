@@ -41,7 +41,7 @@ def handle_pdf():
             return "未上传文件", 400
 
         # 创建临时目录
-        batch_id = datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(uuid.uuid4())[:6]
+        batch_id = operation + "_" + datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(uuid.uuid4())[:6]
         temp_dir = os.path.join(app.config["UPLOAD_FOLDER"], batch_id)
         os.makedirs(temp_dir, exist_ok=True)
 
@@ -99,38 +99,68 @@ def handle_pdf():
 @app.route("/result/<batch_id>")
 def get_result(batch_id):
     temp_dir = os.path.join(app.config["UPLOAD_FOLDER"], batch_id)
-    result_file = os.path.join(
-        temp_dir, "merged.pdf" if "merge" in batch_id else "splits"
-    )
+    if not os.path.exists(temp_dir):
+        return "处理结果不存在", 404
+
+    operation = batch_id.split("_")[0]  # 从batch_id中获取操作类型
+    if operation == "merge":
+        result_file = os.path.join(temp_dir, "merged.pdf")
+        if not os.path.exists(result_file):
+            return "合并文件不存在", 404
+    else:
+        splits_dir = os.path.join(temp_dir, "splits")
+        if not os.path.exists(splits_dir) or not os.listdir(splits_dir):
+            return "分割文件不存在", 404
+
     return {"download_url": f"/process/{batch_id}/result"}
 
 
 @app.route("/process/<batch_id>/result")
 def download_result(batch_id):
     temp_dir = os.path.join(app.config["UPLOAD_FOLDER"], batch_id)
-    if "merge" in batch_id:
+    operation = batch_id.split("_")[0]  # 从batch_id中获取操作类型
+    
+    if operation == "merge":
         result_file = os.path.join(temp_dir, "merged.pdf")
-        return send_file(result_file, as_attachment=True, download_name="merged.pdf")
+        if not os.path.exists(result_file):
+            return "合并文件不存在", 404
+        try:
+            return send_file(
+                result_file,
+                as_attachment=True,
+                download_name="merged.pdf",
+                mimetype='application/pdf'
+            )
+        except Exception as e:
+            print(f"下载文件失败: {str(e)}")
+            return "下载文件失败", 500
     else:
         # 创建内存中的zip文件
-        memory_file = BytesIO()
-        splits_dir = os.path.join(temp_dir, "splits")
-        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-            # 获取所有分割后的PDF文件并按名称排序
-            split_files = sorted(os.listdir(splits_dir))
-            for filename in split_files:
-                if filename.endswith('.pdf'):
-                    file_path = os.path.join(splits_dir, filename)
-                    zf.write(file_path, filename)  # 将文件添加到zip中
-        
-        # 将指针移到文件开头
-        memory_file.seek(0)
-        return send_file(
-            memory_file,
-            mimetype='application/zip',
-            as_attachment=True,
-            download_name=f'split_pdfs_{batch_id}.zip'
-        )
+        try:
+            memory_file = BytesIO()
+            splits_dir = os.path.join(temp_dir, "splits")
+            if not os.path.exists(splits_dir):
+                return "分割文件不存在", 404
+
+            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+                # 获取所有分割后的PDF文件并按名称排序
+                split_files = sorted(os.listdir(splits_dir))
+                for filename in split_files:
+                    if filename.endswith('.pdf'):
+                        file_path = os.path.join(splits_dir, filename)
+                        zf.write(file_path, filename)  # 将文件添加到zip中
+            
+            # 将指针移到文件开头
+            memory_file.seek(0)
+            return send_file(
+                memory_file,
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name=f'split_pdfs_{batch_id}.zip'
+            )
+        except Exception as e:
+            print(f"下载文件失败: {str(e)}")
+            return "下载文件失败", 500
 
 
 def update_progress(batch_id, processed, total):

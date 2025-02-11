@@ -60,6 +60,9 @@ def merge_pdf(files, output_dir, progress_callback=None):
     writer = PdfWriter()
     total_files = len(files)
     
+    # 反转文件列表，因为 PyPDF2 是按照添加顺序来合并的
+    files = files[::-1]
+    
     for index, file in enumerate(files):
         with open(file, 'rb') as f:
             reader = PdfReader(f)
