@@ -8,18 +8,23 @@ def process_pdf(operation, files, temp_dir, progress_callback=None):
             output_path = os.path.join(temp_dir, 'splits')
             os.makedirs(output_path, exist_ok=True)
             interval = int(open(os.path.join(temp_dir, 'interval.txt')).read())
-            return split_pdf(files[0], interval, output_path, progress_callback)
+            result = split_pdf(files[0], interval, output_path, progress_callback)
         elif operation == 'merge':
             os.makedirs(temp_dir, exist_ok=True)
-            return merge_pdf(files, temp_dir, progress_callback)
+            result = merge_pdf(files, temp_dir, progress_callback)
         else:
             raise ValueError("无效的操作类型")
+        
+        return result
 
     finally:
-        # 清理临时文件
+        # 只清理源文件，保留处理结果
         for f in files:
-            if os.path.exists(f):
-                os.remove(f)
+            try:
+                if os.path.exists(f) and f != result:
+                    os.remove(f)
+            except Exception as e:
+                print(f"清理文件失败: {str(e)}")
 
 def split_pdf(input_path, interval, output_dir, progress_callback=None):
     with open(input_path, 'rb') as f:
