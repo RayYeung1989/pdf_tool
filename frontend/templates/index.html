@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF处理助手</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .operation-section { display: none; }
+        .active { display: block !important; }
+        #file-list { max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <h1 class="mb-4 text-center">PDF处理助手</h1>
+        
+        <div class="card shadow">
+            <div class="card-body">
+                <!-- 操作选择 -->
+                <div class="mb-4">
+                    <select class="form-select" id="operation">
+                        <option value="">请选择操作类型</option>
+                        <option value="split">分割PDF</option>
+                        <option value="merge">合并PDF</option>
+                    </select>
+                </div>
+
+                <!-- 文件上传 -->
+                <div class="mb-4">
+                    <input type="file" class="form-control" id="files" multiple accept=".pdf">
+                    <div id="file-list" class="mt-2"></div>
+                </div>
+
+                <!-- 分割参数 -->
+                <div id="split-params" class="operation-section">
+                    <div class="mb-3">
+                        <label class="form-label">分割间隔页数</label>
+                        <input type="number" class="form-control" id="interval" name="interval" min="1" value="1">
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <button class="btn btn-primary w-100" onclick="processFiles()">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+                    开始处理
+                </button>
+
+                <!-- 结果展示 -->
+                <div id="result" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script>
+        $('#operation').change(function() {
+            $('.operation-section').removeClass('active');
+            $(`#${this.value}-params`).addClass('active');
+        });
+
+        $('#files').change(function() {
+            $('#file-list').empty();
+            Array.from(this.files).forEach(file => {
+                $('#file-list').append(`<div class="alert alert-secondary py-2">${file.name}</div>`);
+            });
+        });
+
+        function processFiles() {
+            const btn = $('button');
+            btn.prop('disabled', true);
+            btn.find('.spinner-border').show();
+
+            const formData = new FormData();
+            Array.from($('#files')[0].files).forEach(file => formData.append('files', file));
+            formData.append('operation', $('#operation').val());
+            
+            if ($('#operation').val() === 'split') {
+                formData.append('interval', $('#interval').val());
+            }
+
+            $.ajax({
+                url: '/process',
+                method: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                    success: function(response) {
+                        const batchId = response.batch_id;
+                        const progressInterval = setInterval(() => {
+                            $.get(`/progress/${batchId}`, function(progress) {
+                                const percent = parseInt(progress);
+                                if (percent === -1) {
+                                    clearInterval(progressInterval);
+                                    $('#result').html('<div class="alert alert-danger">处理失败</div>');
+                                    return;
+                                }
+                                
+                                $('#result').html(`
+                                    <div class="progress mb-3">
+                                        <div class="progress-bar" role="progressbar" style="width: ${percent}%">
+                                            ${percent}%
+                                        </div>
+                                    </div>
+                                `);
+                                
+                                if (percent === 100) {
+                                    clearInterval(progressInterval);
+                                    $.get(`/result/${batchId}`, function(data) {
+                                        $('#result').html(`
+                                            <div class="alert alert-success">
+                                                处理完成！<a href="${data.download_url}" download="result.pdf">点击下载</a>
+                                            </div>
+                                        `);
+                                    });
+                                }
+                            });
+                        }, 1000);
+                    },
+                error: function(xhr) {
+                    $('#result').html(`<div class="alert alert-danger">处理失败：${xhr.responseText}</div>`);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    btn.find('.spinner-border').hide();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
