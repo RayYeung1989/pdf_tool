@@ -12,7 +12,7 @@ from datetime import datetime
 
 app = Flask(__name__, template_folder="../frontend/templates")
 app.config["UPLOAD_FOLDER"] = os.path.join(os.getcwd(), "temp_uploads")
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB限制
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB限制
 
 
 @app.route("/")
